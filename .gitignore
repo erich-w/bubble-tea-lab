@@ -1,0 +1,8 @@
+# Your secret key - never commit it
+api_key.properties
+
+# Build output and local setup files
+out/
+bin/
+.jdk_home
+jdk.zip

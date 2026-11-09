@@ -1,0 +1,7 @@
+# Windows scripts: keep the exact bytes (CRLF + Big5 / UTF-8 BOM). Git must not convert them.
+*.bat  -text
+*.ps1  -text
+# Shell script must keep LF or it won't run on Mac/Linux
+*.sh   text eol=lf
+*.java text
+*.md   text

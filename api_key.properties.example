@@ -1,0 +1,4 @@
+# 把這個檔案複製成 api_key.properties，再貼上你的金鑰（setup.bat 會自動幫你做）。
+# 絕對不要把 api_key.properties 上傳到 GitHub 或分享給別人。
+apiKey=PASTE_YOUR_KEY_HERE
+model=gemma-4-26b-a4b-it
