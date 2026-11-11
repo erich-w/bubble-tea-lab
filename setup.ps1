@@ -16,6 +16,7 @@ $jdkDir  = Join-Path $env:LOCALAPPDATA 'bubbletea-jdk'
 $jdkUrl  = 'https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jdk/hotspot/normal/eclipse'
 $minJava = 17
 $model   = 'gemma-4-26b-a4b-it'
+$fallback = 'gemini-3.5-flash'
 $utf8    = New-Object System.Text.UTF8Encoding $false
 Set-Location $root
 
@@ -105,7 +106,7 @@ if (Test-Path $keyFile) {
         $key = "$(Read-Host '  API 金鑰')".Trim().Trim('"')
         if ($key.Length -lt 20) { Bad '這看起來不是完整的金鑰，請再貼一次。' }
     }
-    $content = "# 你的 Gemini API 金鑰。絕對不要上傳到 GitHub 或分享給別人。`r`napiKey=$key`r`nmodel=$model`r`n"
+    $content = "# 你的 Gemini API 金鑰。絕對不要上傳到 GitHub 或分享給別人。`r`napiKey=$key`r`nmodel=$model`r`nfallbackModel=$fallback`r`n"
     [System.IO.File]::WriteAllText($keyFile, $content, $utf8)
     Ok '已儲存 api_key.properties'
 }

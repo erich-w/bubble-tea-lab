@@ -2,3 +2,5 @@
 # 絕對不要把 api_key.properties 上傳到 GitHub 或分享給別人。
 apiKey=PASTE_YOUR_KEY_HERE
 model=gemma-4-26b-a4b-it
+# Gemma 忙碌（HTTP 500）時自動改用的備用模型
+fallbackModel=gemini-3.5-flash

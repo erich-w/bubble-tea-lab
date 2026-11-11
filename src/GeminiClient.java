@@ -17,11 +17,19 @@ import java.util.Map;
  *   2. 用 POST 送到  {baseUrl}/models/{model}:generateContent
  *      並把金鑰放在 "x-goog-api-key" 這個 header
  *   3. 讀回傳的 JSON，取出 candidates[0].content.parts[].text
+ *
+ * Google 的伺服器偶爾會回 500（忙碌），所以：
+ *   - 先用主要模型（Gemma）試，失敗會自動重試幾次
+ *   - 還是不行，就換成備用模型（fallbackModel）
  */
 public class GeminiClient implements LLMClient {
 
+    private static final int MAIN_ATTEMPTS = 3;
+    private static final int FALLBACK_ATTEMPTS = 2;
+
     private final Config config;
     private final HttpClient http;
+    private String lastModelUsed = "";
 
     public GeminiClient(Config config) {
         this.config = config;
@@ -33,12 +41,50 @@ public class GeminiClient implements LLMClient {
 
     @Override
     public String generate(String prompt) throws Exception {
+        Exception last;
+        try {
+            return generateWith(config.getModel(), prompt, MAIN_ATTEMPTS);
+        } catch (BusyException e) {
+            last = e;
+        }
+        if (!config.getFallbackModel().isEmpty()) {
+            try {
+                return generateWith(config.getFallbackModel(), prompt, FALLBACK_ATTEMPTS);
+            } catch (BusyException e) {
+                last = e;
+            }
+        }
+        throw new Exception(last.getMessage());
+    }
+
+    /** 最後一次成功回答的是哪個模型。 */
+    public String getLastModelUsed() {
+        return lastModelUsed;
+    }
+
+    /** 用指定的模型呼叫，伺服器忙碌時最多試 attempts 次。 */
+    String generateWith(String model, String prompt, int attempts) throws Exception {
+        BusyException last = null;
+        for (int i = 0; i < attempts; i++) {
+            try {
+                String text = callOnce(model, prompt);
+                lastModelUsed = model;
+                return text;
+            } catch (BusyException e) {
+                last = e;
+                if (i < attempts - 1) Thread.sleep(1000L * (i + 1)); // 等 1 秒、2 秒再試
+            }
+        }
+        throw last;
+    }
+
+    private String callOnce(String model, String prompt) throws Exception {
         String body = "{\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":"
                 + MiniJson.quote(prompt) + "}]}]}";
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(config.getBaseUrl() + "/models/" + config.getModel() + ":generateContent"))
-                .timeout(Duration.ofSeconds(60))
+                .uri(URI.create(config.getBaseUrl() + "/models/" + model + ":generateContent"))
+                .timeout(Duration.ofSeconds(30))
                 .header("Content-Type", "application/json")
                 .header("x-goog-api-key", config.getApiKey())
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
@@ -48,15 +94,27 @@ public class GeminiClient implements LLMClient {
         try {
             response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         } catch (java.net.http.HttpTimeoutException e) {
-            throw new Exception("等太久沒有回應（逾時），請再試一次。");
+            throw new BusyException("等太久沒有回應（逾時），請再試一次。");
         } catch (java.io.IOException e) {
             throw new Exception("連不上 Google 伺服器，請檢查網路連線（" + e.getClass().getSimpleName() + "）");
         }
 
-        if (response.statusCode() != 200) {
-            throw new Exception(explainError(response.statusCode(), response.body()));
+        int status = response.statusCode();
+        if (status == 200) {
+            return extractText(response.body());
         }
-        return extractText(response.body());
+        String message = "[" + model + "] " + explainError(status, response.body());
+        if (status == 429 || status == 500 || status == 503 || status == 504) {
+            throw new BusyException(message); // 暫時性的錯誤：可以重試或換模型
+        }
+        throw new Exception(message);
+    }
+
+    /** 暫時性的錯誤（伺服器忙碌、逾時、用量超過），值得重試。 */
+    static class BusyException extends Exception {
+        BusyException(String message) {
+            super(message);
+        }
     }
 
     /** 從回傳的 JSON 取出答案文字，並跳過模型「思考過程」的部分。 */
@@ -101,7 +159,8 @@ public class GeminiClient implements LLMClient {
             case 404: advice = "找不到模型。請檢查 api_key.properties 裡的 model= 是否和 AI Studio 的模型名稱一樣。"; break;
             case 429: advice = "超過使用次數限制，請等一分鐘再試。"; break;
             case 500:
-            case 503: advice = "Google 伺服器忙碌中，請等幾秒再試。"; break;
+            case 503:
+            case 504: advice = "Google 伺服器忙碌中，請等幾秒再試。"; break;
             default:  advice = "未預期的錯誤。";
         }
         return "HTTP " + status + " - " + advice + (apiMessage.isEmpty() ? "" : "\n   Google 說：" + apiMessage);

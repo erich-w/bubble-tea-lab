@@ -4,6 +4,8 @@
  */
 public class CheckSetup {
 
+    private static final String TEST_PROMPT = "請只回覆這句話：設定完成，準備來杯手搖飲！";
+
     public static void main(String[] args) {
         System.out.println("\n--- 環境檢查 ---");
         System.out.println("[OK] Java " + System.getProperty("java.version") + " 可以正常使用");
@@ -16,17 +18,35 @@ public class CheckSetup {
             System.exit(1);
             return;
         }
-        System.out.println("[OK] 找到 API 金鑰 " + config.getMaskedKey() + "，模型 = " + config.getModel());
+        System.out.println("[OK] 找到 API 金鑰 " + config.getMaskedKey());
 
-        System.out.println("...  正在傳送測試訊息給 AI（大約 10 秒）");
-        try {
-            String reply = new GeminiClient(config).generate("請只回覆這句話：設定完成，準備來杯手搖飲！");
-            System.out.println("[OK] AI 回覆：" + reply);
-            System.out.println("\n全部正常，可以開始上課了！\n");
-        } catch (Exception e) {
-            System.out.println("[X]  呼叫 AI 失敗：\n   " + e.getMessage());
-            System.out.println("\n請把這個畫面給助教看。\n");
+        GeminiClient client = new GeminiClient(config);
+        System.out.println("...  正在測試主要模型 " + config.getModel() + "（大約 10 秒）");
+        boolean mainOk = test(client, config.getModel(), 3);
+
+        boolean fallbackOk = false;
+        if (!config.getFallbackModel().isEmpty()) {
+            System.out.println("...  正在測試備用模型 " + config.getFallbackModel());
+            fallbackOk = test(client, config.getFallbackModel(), 2);
+        }
+
+        if (mainOk || fallbackOk) {
+            System.out.println("\n全部正常，可以開始上課了！"
+                    + (mainOk ? "" : "（Gemma 目前忙碌，程式會自動改用備用模型）") + "\n");
+        } else {
+            System.out.println("\n兩個模型都無法使用，請把這個畫面給助教看。\n");
             System.exit(2);
+        }
+    }
+
+    private static boolean test(GeminiClient client, String model, int attempts) {
+        try {
+            String reply = client.generateWith(model, TEST_PROMPT, attempts);
+            System.out.println("[OK] " + model + " 回覆：" + reply);
+            return true;
+        } catch (Exception e) {
+            System.out.println("[X]  " + model + " 失敗：\n   " + e.getMessage());
+            return false;
         }
     }
 }

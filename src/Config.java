@@ -16,15 +16,19 @@ public final class Config {
 
     public static final String FILE_NAME = "api_key.properties";
     public static final String DEFAULT_MODEL = "gemma-4-26b-a4b-it";
+    /** Gemma 忙碌時改用的備用模型。在 api_key.properties 寫 fallbackModel= （留空）可以關掉。 */
+    public static final String DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash";
     public static final String DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
     private final String apiKey;
     private final String model;
+    private final String fallbackModel;
     private final String baseUrl;
 
-    private Config(String apiKey, String model, String baseUrl) {
+    private Config(String apiKey, String model, String fallbackModel, String baseUrl) {
         this.apiKey = apiKey;
         this.model = model;
+        this.fallbackModel = fallbackModel;
         this.baseUrl = baseUrl;
     }
 
@@ -49,9 +53,12 @@ public final class Config {
             throw new IllegalStateException(FILE_NAME + " 裡的 apiKey 是空的，請把金鑰貼在 apiKey= 後面");
         }
         String model = clean(p.getProperty("model"));
+        String fallback = p.getProperty("fallbackModel") == null
+                ? DEFAULT_FALLBACK_MODEL : clean(p.getProperty("fallbackModel"));
         String baseUrl = clean(p.getProperty("baseUrl"));
         return new Config(key,
                 model.isEmpty() ? DEFAULT_MODEL : model,
+                fallback,
                 baseUrl.isEmpty() ? DEFAULT_BASE_URL : baseUrl);
     }
 
@@ -67,6 +74,11 @@ public final class Config {
 
     public String getModel() {
         return model;
+    }
+
+    /** 空字串 = 不使用備用模型。 */
+    public String getFallbackModel() {
+        return fallbackModel;
     }
 
     public String getBaseUrl() {
